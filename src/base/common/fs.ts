@@ -1,32 +1,30 @@
 import { inject, injectable } from 'inversify';
+import { promises as fs } from 'fs';
 import { Uri, workspace } from 'vscode';
-
-import { IExtensionUri } from './configuration/context';
 
 @injectable()
 export class WorkspaceFileSystem {
-	constructor(
-		@inject(IExtensionUri)
-		private extensionUri: Uri,
-	) {}
+	constructor() {}
 
-	readFile(path: string | Uri) {
-		return workspace.fs.readFile(this.filePathToURI(path)) as Promise<Uint8Array>;
+	async readFile(path: string): Promise<string> {
+		const uri = Uri.file(path);
+		const data = await workspace.fs.readFile(uri);
+		return Buffer.from(data).toString('utf8');
 	}
 
-	stat(path: string | Uri) {
-		return workspace.fs.stat(this.filePathToURI(path));
+	async writeFile(path: string, content: string): Promise<void> {
+		const uri = Uri.file(path);
+		const data = Buffer.from(content, 'utf8');
+		await workspace.fs.writeFile(uri, data);
 	}
 
-	filePathToURI(path: string | Uri) {
-		if (typeof path === 'string') {
-			return this.joinPath(path);
-		}
-
-		return path;
+	async deleteFile(path: string): Promise<void> {
+		const uri = Uri.file(path);
+		await workspace.fs.delete(uri);
 	}
 
-	joinPath(...pathSegments: string[]) {
-		return Uri.joinPath(this.extensionUri, ...pathSegments);
+	async createDirectory(path: string): Promise<void> {
+		const uri = Uri.file(path);
+		await workspace.fs.createDirectory(uri);
 	}
 }

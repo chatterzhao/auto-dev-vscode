@@ -1,6 +1,6 @@
 import { createContext } from "react";
 import { useDispatch } from "react-redux";
-import { RouterProvider, createMemoryRouter } from "react-router-dom";
+import { RouterProvider, createMemoryRouter, MemoryRouter } from "react-router-dom";
 import Layout from "./components/Layout";
 import useSetup from "./hooks/useSetup";
 import ErrorPage from "./pages/error";
@@ -17,6 +17,7 @@ import { ContextSubmenuItem } from "./shims/typings";
 import useSubmenuContextProviders from "./hooks/useSubmenuContextProviders";
 import { useVscTheme } from "./hooks/useVscTheme";
 import Stats from "./pages/stats";
+import GitHubIssuesPage from "./pages/GitHubIssuesPage";
 
 const router = createMemoryRouter([
   {
@@ -67,6 +68,10 @@ const router = createMemoryRouter([
       {
         path: "/migration",
         element: <MigrationPage />,
+      },
+      {
+        path: "/github-issues",
+        element: <GitHubIssuesPage />,
       },
     ],
   },

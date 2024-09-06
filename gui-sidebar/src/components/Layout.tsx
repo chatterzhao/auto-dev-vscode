@@ -27,6 +27,10 @@ import TextDialog from "./dialogs";
 import IndexingProgressBar from "./loaders/IndexingProgressBar";
 import ProgressBar from "./loaders/ProgressBar";
 import ModelSelect from "./modelSelection/ModelSelect";
+import { IssuesList } from './github/IssuesList';
+import { IssueDiscussion } from './github/IssueDiscussion';
+import { IssueSummary } from './github/IssueSummary';
+import { IssueDevelopment } from './github/IssueDevelopment';
 
 // #region Styled Components
 const FOOTER_HEIGHT = "1.8em";
@@ -179,6 +183,8 @@ const Layout = () => {
 
   const [indexingProgress, setIndexingProgress] = useState(1);
   const [indexingTask, setIndexingTask] = useState("Indexing Codebase");
+
+  const [selectedIssue, setSelectedIssue] = useState<number | null>(null);
 
   return (
     <LayoutTopDiv>

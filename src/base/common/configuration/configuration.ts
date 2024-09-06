@@ -59,3 +59,13 @@ export const CHAT_VIEW_ID = 'autodev.views.chat';
 // Embeddings
 export const EMBEDDING_BATCH_SIZE = 512;
 export const EMBEDDING_STRIP_NEW_LINES = true;
+
+// GitHub Issue Commands
+export const CMD_OPEN_GITHUB_ISSUES = 'autodev.openGitHubIssues';
+export const CMD_READ_GITHUB_ISSUE = 'autodev.readGitHubIssue';
+export const CMD_ANALYZE_GITHUB_ISSUE_DEVELOPMENT = 'autodev.analyzeGitHubIssueDevelopment';
+export const CMD_SUBMIT_GITHUB_ISSUE_SUMMARY = 'autodev.submitGitHubIssueSummary';
+export const CMD_FETCH_GITHUB_ISSUES = 'autodev.fetchGitHubIssues';
+export const CMD_FETCH_GITHUB_ISSUE_COMMENTS = 'autodev.fetchGitHubIssueComments';
+export const CMD_ADD_GITHUB_ISSUE_COMMENT = 'autodev.addGitHubIssueComment';
+export const CMD_SHOW_ISSUE_DETAILS = 'autodev.showIssueDetails';

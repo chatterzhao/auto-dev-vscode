@@ -640,6 +640,29 @@
 						"description": "%autodev.Workspace.customFrameworkCodeFiles.description%"
 					}
 				}
+			},
+			{
+				"title": "GitHub",
+				"properties": {
+					"autodev.github.token": {
+						"type": "string",
+						"default": "",
+						"description": "GitHub Personal Access Token for AutoDev",
+						"order": 1
+					},
+					"autodev.github.account": {
+						"type": "string",
+						"default": "",
+						"description": "GitHub Account",
+						"order": 2
+					},
+					"autodev.github.repositoryName": {
+						"type": "string",
+						"default": "",
+						"description": "GitHub Repository Name, e.g. 'auto-dev-vscode'",
+						"order": 3
+					}
+				}
 			}
 		],
 		"commands": [
@@ -806,6 +829,21 @@
 				"title": "Gen Commit Message",
 				"icon": "$(autodev-icon)",
 				"category": "AutoDev"
+			},
+			{
+				"command": "autodev.openGitHubIssues",
+				"title": "Open GitHub Issues",
+				"category": "AutoDev"
+			},
+			{
+				"command": "autodev.readGitHubIssue",
+				"title": "Read GitHub Issue",
+				"category": "AutoDev"
+			},
+			{
+				"command": "autodev.analyzeGitHubIssueDevelopment",
+				"title": "Analyze GitHub Issue Development",
+				"category": "AutoDev"
 			}
 		],
 		"keybindings": [
@@ -869,6 +907,11 @@
 					"command": "autodev.debugRunR",
 					"when": "false",
 					"group": "navigation"
+				},
+				{
+					"command": "autodev.openGitHubIssues",
+					"when": "view == autodev.views.chat",
+					"group": "navigation@0"
 				}
 			],
 			"editor/context": [
@@ -1040,6 +1083,18 @@
 				},
 				{
 					"command": "autodev.git.generateCommitMessage",
+					"when": "false"
+				},
+				{
+					"command": "autodev.openGitHubIssues",
+					"when": "false"
+				},
+				{
+					"command": "autodev.readGitHubIssue",
+					"when": "false"
+				},
+				{
+					"command": "autodev.analyzeGitHubIssueDevelopment",
 					"when": "false"
 				}
 			]

@@ -1,5 +1,5 @@
 import { inject, injectable } from 'inversify';
-import { CancellationToken, Disposable, ProgressLocation, TextDocument, window, WorkspaceEdit } from 'vscode';
+import { CancellationToken, Disposable, ProgressLocation, TextDocument, window, WorkspaceEdit, workspace, commands } from 'vscode';
 
 import { ConfigurationService } from 'base/common/configuration/configurationService';
 import { IExtensionContext } from 'base/common/configuration/context';
@@ -43,10 +43,13 @@ import { TemplateContext } from './prompt-manage/template/TemplateContext';
 import { TemplateRender } from './prompt-manage/template/TemplateRender';
 import { IProjectService } from './ProviderTypes';
 import { ToolchainContextManager } from './toolchain-context/ToolchainContextManager';
+import { GitHubIssuesService } from './services/GitHubIssuesService';
 
 
 @injectable()
 export class AutoDevExtension {
+	private gitHubIssuesService: GitHubIssuesService | null = null;
+
 	// Vscode
 	ideAction: VSCodeAction;
 	statusBarManager: AutoDevStatusManager;
@@ -252,4 +255,100 @@ export class AutoDevExtension {
 		// Show notifications
 		this.contextState.requestAccessUserCodebasePermission({});
 	}
+
+	async getGitHubIssuesService(): Promise<GitHubIssuesService | null> {
+		if (!this.gitHubIssuesService) {
+			// Use VSCode API
+			const config = workspace.getConfiguration('autodev.github');
+			let token = config.get<string>('token');
+			let account = config.get<string>('account');
+			let repositoryName = config.get<string>('repositoryName');
+			if (!token || !account || !repositoryName) {
+				const action = await window.showErrorMessage(
+					'GitHub 配置未设置，设置后可以与 Issues 交互。您想现在设置吗？',
+					'Open Settings'
+				);
+				if (action === 'Open Settings') {
+					await commands.executeCommand('workbench.action.openSettings', 'autodev.github');
+					// Wait for the user to set the github
+					await new Promise<void>(resolve => {
+						const disposable = workspace.onDidChangeConfiguration(e => {
+							if (e.affectsConfiguration('autodev.github')) {
+								disposable.dispose();
+								resolve();
+							};
+						});
+					});
+					// Re-fetch the token after the user has had a chance to set it
+					token = config.get<string>('token');
+					account = config.get<string>('account');
+					repositoryName = config.get<string>('repositoryName');
+				}
+				if (!token) {
+					window.showErrorMessage('GitHub  is still not set. Cannot interact with Issues.');
+					return null;
+				}
+			}
+			this.gitHubIssuesService = new GitHubIssuesService(this.config, this.lm, token!, account!, repositoryName!);
+		}
+		return this.gitHubIssuesService;
+	}
+
+	async readGitHubIssue(issueNumber: number) {
+		const gitHubIssuesService = await this.getGitHubIssuesService();
+		if (!gitHubIssuesService) {
+			return;
+		}
+		return gitHubIssuesService.fetchIssueContent(issueNumber.toString());
+	}
+
+	async analyzeGitHubIssueDevelopment(issueNumber: number, developmentIdea: string) {
+		const gitHubIssuesService = await this.getGitHubIssuesService();
+		if (!gitHubIssuesService) {
+			return;
+		}
+		return gitHubIssuesService.analyzeIssueDevelopment(issueNumber, developmentIdea);
+	}
+
+	async submitGitHubIssueSummary(issueNumber: number, summary: string) {
+		const gitHubIssuesService = await this.getGitHubIssuesService();
+		if (!gitHubIssuesService) {
+			return;
+		}
+		return gitHubIssuesService.submitIssueSummary(issueNumber, summary);
+	}
+
+	async fetchGitHubIssues() {
+		const gitHubIssuesService = await this.getGitHubIssuesService();
+		if (!gitHubIssuesService) {
+			return [];
+		}
+		return gitHubIssuesService.fetchIssues();
+	}
+
+	async fetchGitHubIssueComments(issueNumber: number) {
+		const gitHubIssuesService = await this.getGitHubIssuesService();
+		if (!gitHubIssuesService) {
+			return [];
+		}
+		return gitHubIssuesService.fetchIssueComments(issueNumber);
+	}
+
+	async addGitHubIssueComment(issueNumber: number, comment: string) {
+		const gitHubIssuesService = await this.getGitHubIssuesService();
+		if (!gitHubIssuesService) {
+			return;
+		}
+		return gitHubIssuesService.addIssueComment(issueNumber, comment);
+	}
+
+	async showIssueDetails(issueNumber: number) {
+		const gitHubIssuesService = await this.getGitHubIssuesService();
+		if (!gitHubIssuesService) {
+			return;
+		}
+		const issueContent = await gitHubIssuesService.fetchIssueContent(issueNumber.toString());
+		window.showInformationMessage(issueContent);
+	}
+
 }

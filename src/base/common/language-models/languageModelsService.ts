@@ -31,7 +31,7 @@ export class LanguageModelsService {
 
 	constructor(
 		@inject(ConfigurationService)
-		private configService: ConfigurationService,
+		private readonly configService: ConfigurationService,
 	) {
 		this._providers = new Map<string, ILanguageModelProvider>([
 			['anthropic', new AnthropicLanguageModelProvider(configService)],

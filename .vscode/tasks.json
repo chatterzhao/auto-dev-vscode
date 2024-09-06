@@ -5,7 +5,10 @@
   "tasks": [
     {
       "label": "extension:build",
-      "dependsOn": ["extension:dev", "gui:dev"],
+      "dependsOn": [
+        "extension:dev",
+        "gui:dev"
+      ],
       "group": {
         "kind": "build",
         "isDefault": true
@@ -52,7 +55,10 @@
     },
     {
       "label": "tasks: watch-tests",
-      "dependsOn": ["npm: watch", "npm: watch-tests"],
+      "dependsOn": [
+        "npm: watch",
+        "npm: watch-tests"
+      ],
       "problemMatcher": []
     },
     {
@@ -62,7 +68,10 @@
       "options": {
         "cwd": "${workspaceFolder}/gui-sidebar"
       },
-      "args": ["run", "watch"],
+      "args": [
+        "run",
+        "watch"
+      ],
       "isBackground": true,
       "problemMatcher": [
         {

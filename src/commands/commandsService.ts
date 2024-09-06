@@ -16,6 +16,8 @@ import {
 	Uri,
 	window,
 	WorkspaceEdit,
+	ViewColumn,
+	workspace
 } from 'vscode';
 
 import {
@@ -42,11 +44,20 @@ import {
 	CMD_TERMINAL_DEBUG,
 	CMD_TERMINAL_EXPLAIN_SELECTION_CONTEXT_MENU,
 	CMD_TERMINAL_SEND_TO,
-} from 'base/common/configuration/configuration';
+	CMD_OPEN_GITHUB_ISSUES,
+	CMD_READ_GITHUB_ISSUE,
+	CMD_ANALYZE_GITHUB_ISSUE_DEVELOPMENT,
+	CMD_SUBMIT_GITHUB_ISSUE_SUMMARY,
+	CMD_FETCH_GITHUB_ISSUES,
+	CMD_FETCH_GITHUB_ISSUE_COMMENTS,
+	CMD_ADD_GITHUB_ISSUE_COMMENT,
+	CMD_SHOW_ISSUE_DETAILS,
+} from 'src/base/common/configuration/configuration';
 import { IExtensionContext } from 'base/common/configuration/context';
 import { getGitExtensionAPI } from 'base/common/git';
 import { logger } from 'base/common/log/log';
 import { showErrorMessage } from 'base/common/messages/messages';
+import { ChatMessageRole } from 'src/base/common/language-models/languageModels';
 
 import { CommitMessageGenAction } from '../action/devops/CommitMessageGenAction';
 import { SystemActionType } from '../action/setting/SystemActionType';
@@ -62,7 +73,7 @@ export class CommandsService {
 
 		@inject(AutoDevExtension)
 		private autodev: AutoDevExtension,
-	) {}
+	) { }
 
 	openSettins() {
 		commands.executeCommand('workbench.action.openSettings', {
@@ -101,6 +112,16 @@ export class CommandsService {
 	}
 	newChatSession(prompt?: string) {
 		this.autodev.newChatSession(prompt);
+	}
+
+	async acceptAllAndComment(issueNumber: number, messages: { role: string, content: string }[]) {
+		const gitHubIssuesService = await this.autodev.getGitHubIssuesService();
+		if (!gitHubIssuesService) {
+			return;
+		}
+
+		const comment = messages.map(msg => `${msg.role === ChatMessageRole.Assistant ? 'AI' : 'Human'}: ${msg.content}`).join('\n\n');
+		await gitHubIssuesService.addIssueComment(issueNumber, comment);
 	}
 
 	showChatHistory() {
@@ -381,44 +402,173 @@ export class CommandsService {
 		);
 	}
 
-	register() {
-		// TODO Migration GenApiData
-		return Disposable.from(
-			// General Commands
-			commands.registerCommand(CMD_OPEN_SETTINGS, this.openSettins, this),
-			commands.registerCommand(CMD_SHOW_TUTORIAL, this.showTutorial, this),
-			commands.registerCommand(CMD_FEEDBACK, this.feedback, this),
-			commands.registerCommand(CMD_SHOW_SYSTEM_ACTION, this.showSystemAction, this),
-			// Chat Commands
-			commands.registerCommand(CMD_SHOW_CHAT_PANEL, this.showChatPanel, this),
-			commands.registerCommand(CMD_QUICK_CHAT, this.quickChat, this),
-			commands.registerCommand(CMD_NEW_CHAT_SESSION, this.newChatSession, this),
-			commands.registerCommand(CMD_SHOW_CHAT_HISTORY, this.showChatHistory, this),
-			// ContextMenu Commands
-			commands.registerCommand(CMD_EXPLAIN_CODE, this.explainCode, this),
-			commands.registerCommand(CMD_OPTIMIZE_CODE, this.optimizeCode, this),
-			commands.registerCommand(CMD_FIX_THIS, this.fixThis, this),
-			commands.registerCommand(CMD_QUICK_FIX, this.quickFix, this),
-			commands.registerCommand(CMD_GEN_DOCSTRING, this.generateDocstring, this),
-			commands.registerCommand(CMD_GEN_CODE_METHOD_COMPLETIONS, this.generateMethod, this),
-			commands.registerCommand(CMD_CREATE_UNIT_TEST, this.generateUnitTest, this),
-			// Codebase Commands
-			commands.registerCommand(CMD_CODEBASE_INDEXING, this.startCodebaseIndexing, this),
-			commands.registerCommand(CMD_CODEBASE_RETRIEVAL, this.showCodebasePanel, this),
-			// Chat Slash Commands
-			commands.registerCommand(CMD_CODEASPACE_ANALYSIS, this.codespaceCodeAnalysis, this),
-			commands.registerCommand(CMD_CODEASPACE_KEYWORDS_ANALYSIS, this.codespaceKeywordsAnalysis, this),
-			//Terminal Commands
-			commands.registerCommand(
-				CMD_TERMINAL_EXPLAIN_SELECTION_CONTEXT_MENU,
-				this.explainTerminalSelectionContextMenu,
-				this,
-			),
-			commands.registerCommand(CMD_TERMINAL_SEND_TO, this.terminalSendTo, this),
-			commands.registerCommand(CMD_TERMINAL_DEBUG, this.terminalDebug, this),
-			// Other Commands
-			commands.registerCommand(CMD_GIT_MESSAGE_COMMIT_GENERATE, this.generateCommitMessage, this),
+	async openGitHubIssues() {
+		const gitHubIssuesService = await this.autodev.getGitHubIssuesService();
+		if (!gitHubIssuesService) {
+			return;
+		}
+
+		const issues = await gitHubIssuesService.fetchIssues();
+		const panel = window.createWebviewPanel(
+			'githubIssues',
+			'GitHub Issues',
+			ViewColumn.One,
+			{ enableScripts: true }
 		);
+
+		panel.webview.html = this.getGitHubIssuesHtml(issues!);
+	}
+
+	private getGitHubIssuesHtml(issues: { id: number; number: number; title: string }[]): string {
+		const config = workspace.getConfiguration('autodev.github');
+		let repositoryName = config.get<string>('repositoryName');
+		return `
+			<!DOCTYPE html>
+			<html lang="en">
+			<head>
+				<meta charset="UTF-8">
+				<meta name="viewport" content="width=device-width, initial-scale=1.0">
+				<title>GitHub Issues</title>
+			</head>
+			<body>
+				<h1>GitHub Issues for ${repositoryName}</h1>
+				<div id="issues-list">
+					${issues.map(issue => `
+						<div>
+							<h3>#${issue.number} ${issue.title}</h3>
+							<button onclick="selectIssue(${issue.number})">View</button>
+						</div>
+					`).join('')}
+				</div>
+				<script>
+					const vscode = acquireVsCodeApi();
+
+					function selectIssue(issueNumber) {
+						vscode.postMessage({ command: 'selectIssue', issueNumber: issueNumber });
+					}
+				</script>
+			</body>
+			</html>
+		`;
+	}
+
+	async register() {
+		const registeredCommands = await commands.getCommands();
+
+		const registerCommandIfNotExists = (commandId: string, callback: (...args: any[]) => any) => {
+			if (!registeredCommands.includes(commandId)) {
+				return commands.registerCommand(commandId, callback);
+			}
+			return undefined;
+		};
+
+		// General Commands
+		const openSettingsCommand = registerCommandIfNotExists(CMD_OPEN_SETTINGS, this.openSettins.bind(this));
+		if (openSettingsCommand) openSettingsCommand.dispose();
+
+		const showTutorialCommand = registerCommandIfNotExists(CMD_SHOW_TUTORIAL, this.showTutorial.bind(this));
+		if (showTutorialCommand) showTutorialCommand.dispose();
+
+		const feedbackCommand = registerCommandIfNotExists(CMD_FEEDBACK, this.feedback.bind(this));
+		if (feedbackCommand) feedbackCommand.dispose();
+
+		const showSystemActionCommand = registerCommandIfNotExists(CMD_SHOW_SYSTEM_ACTION, this.showSystemAction.bind(this));
+		if (showSystemActionCommand) showSystemActionCommand.dispose();
+
+		// Chat Commands
+		const showChatPanelCommand = registerCommandIfNotExists(CMD_SHOW_CHAT_PANEL, this.showChatPanel.bind(this));
+		if (showChatPanelCommand) showChatPanelCommand.dispose();
+
+		const quickChatCommand = registerCommandIfNotExists(CMD_QUICK_CHAT, this.quickChat.bind(this));
+		if (quickChatCommand) quickChatCommand.dispose();
+
+		const newChatSessionCommand = registerCommandIfNotExists(CMD_NEW_CHAT_SESSION, this.newChatSession.bind(this));
+		if (newChatSessionCommand) newChatSessionCommand.dispose();
+
+		const showChatHistoryCommand = registerCommandIfNotExists(CMD_SHOW_CHAT_HISTORY, this.showChatHistory.bind(this));
+		if (showChatHistoryCommand) showChatHistoryCommand.dispose();
+
+		// ContextMenu Commands
+		const explainCodeCommand = registerCommandIfNotExists(CMD_EXPLAIN_CODE, this.explainCode.bind(this));
+		if (explainCodeCommand) explainCodeCommand.dispose();
+
+		const optimizeCodeCommand = registerCommandIfNotExists(CMD_OPTIMIZE_CODE, this.optimizeCode.bind(this));
+		if (optimizeCodeCommand) optimizeCodeCommand.dispose();
+
+		const fixThisCommand = registerCommandIfNotExists(CMD_FIX_THIS, this.fixThis.bind(this));
+		if (fixThisCommand) fixThisCommand.dispose();
+
+		const quickFixCommand = registerCommandIfNotExists(CMD_QUICK_FIX, this.quickFix.bind(this));
+		if (quickFixCommand) quickFixCommand.dispose();
+
+		const genDocstringCommand = registerCommandIfNotExists(CMD_GEN_DOCSTRING, this.generateDocstring.bind(this));
+		if (genDocstringCommand) genDocstringCommand.dispose();
+
+		const genCodeMethodCompletionsCommand = registerCommandIfNotExists(CMD_GEN_CODE_METHOD_COMPLETIONS, this.generateMethod.bind(this));
+		if (genCodeMethodCompletionsCommand) genCodeMethodCompletionsCommand.dispose();
+
+		const createUnitTestCommand = registerCommandIfNotExists(CMD_CREATE_UNIT_TEST, this.generateUnitTest.bind(this));
+		if (createUnitTestCommand) createUnitTestCommand.dispose();
+
+		// Codebase Commands
+		const codebaseIndexingCommand = registerCommandIfNotExists(CMD_CODEBASE_INDEXING, this.startCodebaseIndexing.bind(this));
+		if (codebaseIndexingCommand) codebaseIndexingCommand.dispose();
+
+		const codebaseRetrievalCommand = registerCommandIfNotExists(CMD_CODEBASE_RETRIEVAL, this.showCodebasePanel.bind(this));
+		if (codebaseRetrievalCommand) codebaseRetrievalCommand.dispose();
+
+		// Chat Slash Commands
+		const codespaceAnalysisCommand = registerCommandIfNotExists(CMD_CODEASPACE_ANALYSIS, this.codespaceCodeAnalysis.bind(this));
+		if (codespaceAnalysisCommand) codespaceAnalysisCommand.dispose();
+
+		const codespaceKeywordsAnalysisCommand = registerCommandIfNotExists(CMD_CODEASPACE_KEYWORDS_ANALYSIS, this.codespaceKeywordsAnalysis.bind(this));
+		if (codespaceKeywordsAnalysisCommand) codespaceKeywordsAnalysisCommand.dispose();
+
+		// Terminal Commands
+		const terminalExplainSelectionContextMenuCommand = registerCommandIfNotExists(CMD_TERMINAL_EXPLAIN_SELECTION_CONTEXT_MENU, this.explainTerminalSelectionContextMenu.bind(this));
+		if (terminalExplainSelectionContextMenuCommand) terminalExplainSelectionContextMenuCommand.dispose();
+
+		const terminalSendToCommand = registerCommandIfNotExists(CMD_TERMINAL_SEND_TO, this.terminalSendTo.bind(this));
+		if (terminalSendToCommand) terminalSendToCommand.dispose();
+
+		const terminalDebugCommand = registerCommandIfNotExists(CMD_TERMINAL_DEBUG, this.terminalDebug.bind(this));
+		if (terminalDebugCommand) terminalDebugCommand.dispose();
+
+		// Other Commands
+		const gitMessageCommitGenerateCommand = registerCommandIfNotExists(CMD_GIT_MESSAGE_COMMIT_GENERATE, this.generateCommitMessage.bind(this));
+		if (gitMessageCommitGenerateCommand) gitMessageCommitGenerateCommand.dispose();
+
+		// GitHub Commands
+		const openGitHubIssuesCommand = registerCommandIfNotExists(CMD_OPEN_GITHUB_ISSUES, this.openGitHubIssues.bind(this));
+		if (openGitHubIssuesCommand) openGitHubIssuesCommand.dispose();
+
+		const readGitHubIssueCommand = registerCommandIfNotExists(CMD_READ_GITHUB_ISSUE, this.autodev.readGitHubIssue.bind(this));
+		if (readGitHubIssueCommand) readGitHubIssueCommand.dispose();
+
+		const analyzeGitHubIssueDevelopmentCommand = registerCommandIfNotExists(CMD_ANALYZE_GITHUB_ISSUE_DEVELOPMENT, this.autodev.analyzeGitHubIssueDevelopment.bind(this));
+		if (analyzeGitHubIssueDevelopmentCommand) analyzeGitHubIssueDevelopmentCommand.dispose();
+
+		const submitGitHubIssueSummaryCommand = registerCommandIfNotExists(CMD_SUBMIT_GITHUB_ISSUE_SUMMARY, this.autodev.submitGitHubIssueSummary.bind(this));
+		if (submitGitHubIssueSummaryCommand) submitGitHubIssueSummaryCommand.dispose();
+
+		const fetchGitHubIssuesCommand = registerCommandIfNotExists(CMD_FETCH_GITHUB_ISSUES, this.autodev.fetchGitHubIssues.bind(this));
+		if (fetchGitHubIssuesCommand) fetchGitHubIssuesCommand.dispose();
+
+		const fetchGitHubIssueCommentsCommand = registerCommandIfNotExists(CMD_FETCH_GITHUB_ISSUE_COMMENTS, this.autodev.fetchGitHubIssueComments.bind(this));
+		if (fetchGitHubIssueCommentsCommand) fetchGitHubIssueCommentsCommand.dispose();
+
+		const addGitHubIssueCommentCommand = registerCommandIfNotExists(CMD_ADD_GITHUB_ISSUE_COMMENT, this.autodev.addGitHubIssueComment.bind(this));
+		if (addGitHubIssueCommentCommand) addGitHubIssueCommentCommand.dispose();
+
+		const showIssueDetailsCommand = registerCommandIfNotExists(CMD_SHOW_ISSUE_DETAILS, this.autodev.showIssueDetails.bind(this));
+		if (showIssueDetailsCommand) showIssueDetailsCommand.dispose();
+
+		// Codespace Commands
+		const codespaceAnalysisCommand2 = registerCommandIfNotExists(CMD_CODEASPACE_ANALYSIS, this.codespaceCodeAnalysis.bind(this));
+		if (codespaceAnalysisCommand2) codespaceAnalysisCommand2.dispose();
+
+		const codespaceKeywordsAnalysisCommand2 = registerCommandIfNotExists(CMD_CODEASPACE_KEYWORDS_ANALYSIS, this.codespaceKeywordsAnalysis.bind(this));
+		if (codespaceKeywordsAnalysisCommand2) codespaceKeywordsAnalysisCommand2.dispose();
 	}
 }
 

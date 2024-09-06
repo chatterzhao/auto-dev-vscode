@@ -9,6 +9,8 @@ export default defineConfig({
     // Change the output .js filename to not include a hash
     rollupOptions: {
       // external: ["vscode-webview"],
+      //不要尝试打包 "vscode" 模块，因为它是一个外部依赖，在 VS Code 环境中运行时会提供
+      external: ["vscode"],
       output: {
         entryFileNames: `assets/[name].js`,
         chunkFileNames: `assets/[name].js`,
